@@ -1,87 +1,81 @@
-# LLM Wiki Workflow - Skills
+# LLM Wiki Workflow
 
-file-ingest + tag-curation 打包為可安裝 Skill。
+將 file-ingest + tag-curation 兩個技能封裝為可安裝格式。
 
-## 安裝方式
+## 技能一：file-ingest
 
-```bash
-clawhub install file-ingest --dir skills --workdir ~/.openclaw/workspace
-```
-
-或從 GitHub 直接 clone：
-```bash
-git clone https://github.com/openclawGit200/LLM_WIKI_workflow.git ~/.openclaw/workspace/skills/llm-wiki-workflow
-```
-
-## 內含 Skills
-
-### file-ingest v1.0
-
-將各種格式檔案轉換為乾淨 Markdown，存入 Obsidian Vault。
+**功能**：將各種格式檔案轉換為乾淨 Markdown，存入 Obsidian Vault `raw md/`。
 
 **支援格式**：docx / pdf / pptx / xlsx / html / txt / md
 
 **依賴工具**：
--  — docx/html/pptx/xlsx → Markdown
-- （poppler）— PDF → txt
-- textutil: [command_option] [other_options] file...
-Command options are (-help is the default):
- -help          show this message and exit
- -info          display information about each file
- -convert fmt   convert each input file to format (txt, rtf, rtfd,
-                html, doc, docx, odt, wordml, or webarchive)
- -cat fmt       concatenate input files into one output file
-There are some additional optional arguments:
- -extension ext alternate extension for all output files
- -output path   alternate file name for first output file
- -stdin         read from stdin instead of files
- -stdout        send first output file to stdout
- -encoding IANA_name|NSStringEncoding
-                encoding used for plain text or html output files
-                (default encoding is UTF-8)
- -inputencoding IANA_name|NSStringEncoding
-                encoding used to interpret plain text input files
-                (by default encoding will be detected from BOM)
- -format fmt    force input files to be interpreted in this format
- -font font     specify font used for converting plain to rich text
- -fontsize size specify font size for converting plain to rich text
- --             specifies that all further arguments are file names
-
- -noload        do not load subsidiary resources for html files
- -nostore       do not write out subsidiary resources for html files
- -baseurl url   base URL for subsidiary resources in html files
- -timeout t     time in seconds to wait for html resources to load
- -textsizemultiplier x
-                factor to apply to font sizes in html files
- -excludedelements "(tag1, tag2, ...)"
-                html elements to exclude from html output files
- -prefixspaces n
-                number of spaces to indent nested html output
-
- -strip         do not copy metadata attributes to output files
- -title val     title metadata attribute for output files
- -author val    author metadata attribute for output files
- -subject val   subject metadata attribute for output files
- -keywords "(val1, val2, ...)"
-                keywords metadata attribute for output files
- -comment val   comment metadata attribute for output files
- -editor val    last editor metadata attribute for output files
- -company val   company metadata attribute for output files
- -creationtime yyyy-mm-ddThh:mm:ssZ
-                creation time metadata attribute for output files
- -modificationtime yyyy-mm-ddThh:mm:ssZ
-                modification time metadata attribute for output files（macOS）— rtf/doc → docx
--  /  — Python 庫
+- `markitdown` — docx/html/pptx/xlsx → Markdown
+- `pdftotext`（poppler）— PDF → txt
+- `textutil`（macOS）— rtf/doc → docx
+- `openpyxl` / `python-pptx` — Python 庫
 
 **使用**：
 ```bash
-python3 scripts/convert.py "/path/to/file.docx" [--vault-path /path/to/vault]
+python3 file-ingest/scripts/convert.py "/path/to/file.docx" [--vault-path /path/to/vault]
 ```
 
-**輸出**：Obsidian Vault 
+**安裝**：
+```bash
+git clone https://github.com/openclawGit200/LLM_WIKI_workflow.git ~/.openclaw/workspace/skills/llm-wiki-workflow
+```
 
-詳見 SKILL.md
+---
 
-## 檔案結構
+## 技能二：tag-curation
 
+**功能**：從 Markdown 文字萃取關鍵詞，Cosine + MMR 評分，飛書卡片呈現，User 勾選後入庫。
 
+**Pipeline**：
+```
+文字輸入
+  → cosine_mmr.py（Cosine Top-100 + MMR Top-100）
+  → 飛書卡片呈現
+  → User 回覆「採用 1,3,5」或「採用 all」
+  → curate.py save → SQLite 入庫
+  → 關鍵詞池更新（hit_count / reject_count）
+```
+
+**模型**：`mahonzhan/all-MiniLM-L6-v2:latest`（Ollama，384維）
+
+**評分**：
+- `local_score` = Cosine Similarity 正規化（1~10）
+- `freq_score` = 歷史 doc_count 正規化（1~10）
+- `combined` = local + freq
+
+**Tier 邏輯**：
+- Tier1（最多10個）= 被 User 選中的詞 + 補足至10
+- Tier2 = 原始 Cosine Top-20 第11~20名
+
+**使用**：
+```bash
+python3 tag-curation/scripts/chunk_analysis_pipeline.py --text "文字" --category "類別" --title "標題"
+```
+
+**依賴**：
+- Ollama（Port 11434）+ all-MiniLM-L6-v2 模型
+- jieba、SQLite（`knowledge.db`）
+- 飛書（呈現互動卡片）
+
+---
+
+## Repo 結構
+
+```
+LLM_WIKI_workflow/
+├── README.md
+├── file-ingest/
+│   ├── SKILL.md
+│   └── scripts/
+│       └── convert.py
+└── tag-curation/
+    ├── SKILL.md
+    └── scripts/
+        ├── curate.py
+        ├── cosine_mmr.py
+        └── chunk_analysis_pipeline.py
+```
